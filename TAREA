@@ -5,10 +5,17 @@ import psychopy
 import pandas as pd
 from psychopy import visual, core, event
 import os
-from pathlib import Path
+#import pyxid2
 
 # Configuración de la ventana
 win = visual.Window(size=(800, 600), color=(1, 1, 1), units="pix", fullscr=False)
+
+# Configuración del dispositivo para triggers
+#devices = pyxid2.get_xid_devices()
+#if len(devices) == 0:
+#    raise RuntimeError("No se encontró ningún dispositivo XID.")
+#dev = devices[0]  # Seleccionar el primer dispositivo
+#dev.set_pulse_duration(300)  # Configurar duración del pulso en milisegundos
 
 # Lista para almacenar datos de la tarea
 datos_ensayo = []
@@ -172,7 +179,7 @@ def seleccionar_imagenes_sin_repeticion(repeticiones):
         random.shuffle(lista_imagenes)
         for img in lista_imagenes:
             # Obtener la categoría de la imagen
-            nombre_imagen = Path(img).stem
+            nombre_imagen = img.split("\\")[-1].split("/")[-1].split(".")[0]
             categoria = categorias.get(nombre_imagen, '')
 
             # Verificar si se puede agregar la imagen según las reglas
@@ -205,19 +212,20 @@ def seleccionar_imagenes_sin_repeticion(repeticiones):
 
     return lista_final
 
-import random
-
 def generar_congruencia(total_trials, congruencia_porcentaje):
-    congruentes = int(total_trials * congruencia_porcentaje)
+    """
+    Genera una lista determinista de congruencia/incongruencia basada en el porcentaje deseado.
+    """
+    congruentes = round(total_trials * congruencia_porcentaje)
     incongruentes = total_trials - congruentes
 
-    # Seguridad: forzamos los números exactos
-    assert congruentes + incongruentes == total_trials
+    # Crear la lista con las proporciones exactas
+    congruencia_lista = [1] * congruentes + [0] * incongruentes  # 1 = congruente, 0 = incongruente
 
-    lista_congruencia = [1] * congruentes + [0] * incongruentes
-    random.shuffle(lista_congruencia)
-    return lista_congruencia
+    # Barajar la lista para aleatorizar el orden
+    random.shuffle(congruencia_lista)
 
+    return congruencia_lista
 
 def evaluar_respuesta(img, keys, congruencia_lista):
     """
@@ -237,9 +245,6 @@ def evaluar_respuesta(img, keys, congruencia_lista):
 
     tipo_asociacion = "N/A"
     feedback = -1
-    
-    # Inicializar el índice de congruencia
-    indice_congruencia = 0
 
     # Asignar tipo de asociación y calcular feedback basado en la lista determinista
     if "C.jpg" in img or "fbE.jpg" in img:
@@ -247,13 +252,12 @@ def evaluar_respuesta(img, keys, congruencia_lista):
         feedback = correct  # Feedback siempre congruente
     elif "B.jpg" in img or "A.jpg" in img:
         tipo_asociacion = "90-10"
-        feedback = correct if congruencia_lista[indice_congruencia] == 1 else abs(correct - 1)
+        feedback = correct if congruencia_lista.pop(0) == 1 else abs(correct - 1)
     elif "E.jpg" in img or "F.jpg" in img:
         tipo_asociacion = "80-20"
-        feedback = correct if congruencia_lista[indice_congruencia] == 1 else abs(correct - 1)
+        feedback = correct if congruencia_lista.pop(0) == 1 else abs(correct - 1)
 
     congruente = 1 if correct == feedback else 0
-    indice_congruencia += 1
 
     # Log de depuración
     print(f"Imagen: {img}, Correct: {correct}, Feedback: {feedback}, Tipo Asociación: {tipo_asociacion}, Go/No-Go: {go_no_go}, Congruente: {congruente}")
@@ -284,6 +288,7 @@ def ejecutar_bloque(repeticiones):
         # Cruz de fijación
         fixation_start_time = core.getTime() * 1000 - tarea_start_time
         fixation.draw()
+        #dev.activate_line(bitmask=1)  # Trigger para fijación
         win.flip()
 
         while True:
@@ -298,6 +303,7 @@ def ejecutar_bloque(repeticiones):
         # Mostrar imagen
         imagen_stim.image = img
         imagen_stim.draw()
+        #dev.activate_line(bitmask=2)  # Trigger para imagen
         win.flip()
         imagen_start_time = core.getTime() * 1000 - tarea_start_time
         keys = event.waitKeys(maxWait=1.0, keyList=["space", "escape"], timeStamped=True)
@@ -305,6 +311,9 @@ def ejecutar_bloque(repeticiones):
 
         if keys and keys[0][0] == "escape":
             check_exit()
+
+#        #if keys:
+#            dev.activate_line(bitmask=3)  # Trigger para tecla presionada
 
         tiempo_transcurrido = imagen_end_time - imagen_start_time
         tiempo_restante = max(0, 1000 - tiempo_transcurrido)
@@ -315,7 +324,7 @@ def ejecutar_bloque(repeticiones):
         reaction_time_ms = round((keys[0][1] * 1000 - tarea_start_time), 3) if keys else "N/A"
 
         # Obtener el nombre base de la imagen (sin extensión)
-        nombre_imagen = Path(img).stem
+        nombre_imagen = img.split("\\")[-1].split("/")[-1].split(".")[0]
 
         # Evaluar la respuesta usando la lista correcta de congruencia
         correct, feedback, tipo_asociacion, go_no_go, tecla_registrada, congruente = evaluar_respuesta(
@@ -326,6 +335,7 @@ def ejecutar_bloque(repeticiones):
         feedback_start_time = core.getTime() * 1000 - tarea_start_time
         feedback_stim.text = "Correcto" if feedback == 1 else "Incorrecto"
         feedback_stim.draw()
+        #dev.activate_line(bitmask=4)
         win.flip()
 
         while True:
@@ -349,28 +359,26 @@ def ejecutar_bloque(repeticiones):
 try:
     datos_ensayo = ejecutar_bloque(20)
 
-    # Mostrar pantalla con mensaje de transición
     transicion_text = visual.TextStim(win, text="¡Muy bien! Ahora que has comprendido la tarea, vamos a realizar la prueba. Pulsa la barra espaciadora cuando estés preparado para comenzar.", color=(-1, -1, -1), height=30)
     transicion_text.draw()
     win.flip()
     if "escape" in event.waitKeys(keyList=["space", "escape"]):
         check_exit()
 
-    # Ejecutar la tarea principal en 4 bloques de 102 trials cada uno
     for i in range(4):
+        print(f"Ejecutando bloque {i + 1}...")
         datos_principales += ejecutar_bloque(90)
-        # Liberar recursos de memoria
+
+        # Liberar recursos de memoria y gráficos
         win.clearBuffer()
-        if i < 3:  # No mostrar descanso después del último bloque
+
+        if i < 3:  # Mensaje de descanso
             descanso_text = visual.TextStim(win, text="Tómate un descanso, y cuando estés preparado para seguir, pulsa la barra espaciadora", color=(-1, -1, -1), height=30)
             descanso_text.draw()
             win.flip()
-            # Limpiar eventos previos
-            event.clearEvents()
             if "escape" in event.waitKeys(keyList=["space", "escape"]):
                 check_exit()
 
-    # Mostrar pantalla de finalización
     final_text = visual.TextStim(win, text="¡Has terminado con la tarea! Muchas gracias por participar.", color=(-1, -1, -1), height=30)
     final_text.draw()
     win.flip()
@@ -382,7 +390,6 @@ except Exception as e:
     guardar_datos()
     win.close()
     core.quit()
-
 finally:
     guardar_datos()
     win.close()
