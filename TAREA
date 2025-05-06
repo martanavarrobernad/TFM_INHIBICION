@@ -371,7 +371,6 @@ try:
 
         # Liberar recursos de memoria y gráficos
         win.clearBuffer()
-        dev.reset_base_timer()
 
         if i < 3:  # Mensaje de descanso
             descanso_text = visual.TextStim(win, text="Tómate un descanso, y cuando estés preparado para seguir, pulsa la barra espaciadora", color=(-1, -1, -1), height=30)
