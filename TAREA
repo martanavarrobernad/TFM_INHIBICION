@@ -126,6 +126,7 @@ imagen_stim = visual.ImageStim(win)
 # Definir el estímulo de feedback
 feedback_stim = visual.TextStim(win, text="", color=(-1, -1, -1), height=40)
 
+# Lista de imágenes
 imagenes = [
     r"C:\Users\navar\Desktop\tarea tfm\habitual_inhibition\E.jpg",
     r"C:\Users\navar\Desktop\tarea tfm\habitual_inhibition\F.jpg",
@@ -145,78 +146,41 @@ proporciones_congruencia = {
     'C': 1.0
 }
 
-def seleccionar_imagenes_sin_repeticion(repeticiones):
-    """
-    Genera una lista de imágenes para un bloque, asegurando que no haya dos imágenes iguales seguidas
-    y que no haya más de 4 o 5 go o no-go consecutivos.
-    """
-    # Crear la lista base de imágenes (15 veces cada una de las 6 imágenes para un total de 90)
+def seleccionar_imagenes_sin_repetir(repeticiones):
     lista_imagenes = []
     num_por_imagen = repeticiones // len(imagenes)
 
+    # Añadir cada imagen el número necesario de veces
     for img in imagenes:
         lista_imagenes.extend([img] * num_por_imagen)
 
-    # Crear una lista para almacenar el orden final
-    lista_final = []
+    # Barajar la lista de imágenes
+    random.shuffle(lista_imagenes)
 
-    # Mapear imágenes con sus categorías ("go" o "no-go")
-    categorias = {
-        'A': 'no-go',
-        'F': 'no-go',
-        'fbE': 'no-go',
-        'E': 'go',
-        'B': 'go',
-        'C': 'go'
-    }
+    # Asegurar que no haya imágenes consecutivas iguales
+    imagenes_final = []
+    ultima_imagen = None
+    for img in lista_imagenes:
+        if img != ultima_imagen:
+            imagenes_final.append(img)
+            ultima_imagen = img
+        else:
+            # Si la imagen es igual a la última, buscar una alternativa
+            alternativas = [x for x in lista_imagenes if x != ultima_imagen and x not in imagenes_final]
+            if alternativas:
+                nueva_imagen = random.choice(alternativas)
+                imagenes_final.append(nueva_imagen)
+                ultima_imagen = nueva_imagen
+            else:
+                imagenes_final.append(img)  # Si no hay alternativas, mantenerla
 
-    # Contadores de secuencias
-    go_count = 0
-    no_go_count = 0
-
-    # Mientras haya imágenes por asignar
-    while lista_imagenes:
-        random.shuffle(lista_imagenes)
-        for img in lista_imagenes:
-            # Obtener la categoría de la imagen
-            nombre_imagen = img.split("\\")[-1].split("/")[-1].split(".")[0]
-            categoria = categorias.get(nombre_imagen, '')
-
-            # Verificar si se puede agregar la imagen según las reglas
-            if lista_final and lista_final[-1] == img:
-                continue  # No permitir imágenes consecutivas iguales
-            if categoria == "go" and go_count >= 5:
-                continue  # No permitir más de 5 "go" consecutivos
-            if categoria == "no-go" and no_go_count >= 5:
-                continue  # No permitir más de 5 "no-go" consecutivos
-
-            # Agregar la imagen a la lista final
-            lista_final.append(img)
-            lista_imagenes.remove(img)
-
-            # Actualizar los contadores de secuencias
-            if categoria == "go":
-                go_count += 1
-                no_go_count = 0
-            elif categoria == "no-go":
-                no_go_count += 1
-                go_count = 0
-
-            # Reiniciar contadores si se cambia de categoría
-            if go_count == 0:
-                no_go_count = 0
-            elif no_go_count == 0:
-                go_count = 0
-
-            break
-
-    return lista_final
+    return imagenes_final
 
 def generar_congruencia(total_trials, congruencia_porcentaje):
     """
     Genera una lista determinista de congruencia/incongruencia basada en el porcentaje deseado.
     """
-    congruentes = round(total_trials * congruencia_porcentaje)
+    congruentes = int(total_trials * congruencia_porcentaje)
     incongruentes = total_trials - congruentes
 
     # Crear la lista con las proporciones exactas
@@ -266,7 +230,7 @@ def evaluar_respuesta(img, keys, congruencia_lista):
     
 def ejecutar_bloque(repeticiones):
     datos = []
-    lista_imagenes = seleccionar_imagenes_sin_repeticion(repeticiones)
+    lista_imagenes = seleccionar_imagenes_sin_repetir(repeticiones)
 
     # Crear un diccionario para almacenar las listas de congruencia por imagen
     from collections import Counter
@@ -359,37 +323,30 @@ def ejecutar_bloque(repeticiones):
 try:
     datos_ensayo = ejecutar_bloque(20)
 
+    # Mostrar pantalla con mensaje de transición
     transicion_text = visual.TextStim(win, text="¡Muy bien! Ahora que has comprendido la tarea, vamos a realizar la prueba. Pulsa la barra espaciadora cuando estés preparado para comenzar.", color=(-1, -1, -1), height=30)
     transicion_text.draw()
     win.flip()
     if "escape" in event.waitKeys(keyList=["space", "escape"]):
         check_exit()
 
+    # Ejecutar la tarea principal en 4 bloques de 102 trials cada uno
     for i in range(4):
-        print(f"Ejecutando bloque {i + 1}...")
         datos_principales += ejecutar_bloque(90)
-
-        # Liberar recursos de memoria y gráficos
-        win.clearBuffer()
-
-        if i < 3:  # Mensaje de descanso
+        if i < 3:  # No mostrar descanso después del último bloque
             descanso_text = visual.TextStim(win, text="Tómate un descanso, y cuando estés preparado para seguir, pulsa la barra espaciadora", color=(-1, -1, -1), height=30)
             descanso_text.draw()
             win.flip()
             if "escape" in event.waitKeys(keyList=["space", "escape"]):
                 check_exit()
 
+    # Mostrar pantalla de finalización
     final_text = visual.TextStim(win, text="¡Has terminado con la tarea! Muchas gracias por participar.", color=(-1, -1, -1), height=30)
     final_text.draw()
     win.flip()
     if "escape" in event.waitKeys(keyList=["space", "escape"]):
         check_exit()
 
-except Exception as e:
-    print(f"Error durante la ejecución: {e}")
-    guardar_datos()
-    win.close()
-    core.quit()
 finally:
     guardar_datos()
     win.close()
